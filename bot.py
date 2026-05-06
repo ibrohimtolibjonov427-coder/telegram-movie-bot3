@@ -30,6 +30,70 @@ ADMIN_IDS = list(
 
 db = Database()
 
+# ===================== SUBSCRIPTION =====================
+
+async def check_subscription(user_id, bot):
+
+    channels = db.get_channels()
+
+    if not channels:
+        return True
+
+    for channel in channels:
+
+        channel_id = channel[1]
+
+        try:
+
+            member = await bot.get_chat_member(
+                channel_id,
+                user_id
+            )
+
+            if member.status not in [
+                "member",
+                "administrator",
+                "creator"
+            ]:
+                return False
+
+        except:
+            return False
+
+    return True
+
+
+async def subscription_required(update, context):
+
+    channels = db.get_channels()
+
+    keyboard = []
+
+    for channel in channels:
+
+        channel_id = channel[1]
+        channel_name = channel[2]
+
+        username = channel_id.replace("@", "")
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f"📢 {channel_name}",
+                url=f"https://t.me/{username}"
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "✅ Tekshirish",
+            callback_data="check_sub"
+        )
+    ])
+
+    await update.message.reply_text(
+        "📢 Botdan foydalanish uchun kanallarga obuna bo'ling:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 # ===================== HELPERS =====================
 
 
@@ -41,6 +105,20 @@ def is_admin(user_id: int) -> bool:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
+    is_subscribed = await check_subscription(
+        update.effective_user.id,
+        context.bot
+    )
+
+    if not is_subscribed:
+
+        await subscription_required(
+            update,
+            context
+        )
+
+        return
 
     text = (
         f"👋 Salom, *{user.first_name}*!\n\n"
@@ -79,6 +157,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ===================== USER CODE HANDLER =====================
 
 async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    is_subscribed = await check_subscription(
+        update.effective_user.id,
+        context.bot
+    )
+
+    if not is_subscribed:
+        await subscription_required(
+            update,
+            context
+        )
+
+        return
+
     if not update.message or not update.message.text:
         return
 
@@ -158,7 +249,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➕ Kino qo'shish", callback_data="admin_add")],
         [InlineKeyboardButton("📋 Kinolar ro'yxati", callback_data="admin_list")],
         [InlineKeyboardButton("🗑 Kino o'chirish", callback_data="admin_delete")],
-        [InlineKeyboardButton("📊 Statistika", callback_data="admin_stats")]
+        [InlineKeyboardButton("📊 Statistika", callback_data="admin_stats")],
+        [InlineKeyboardButton("📢 Kanallar", callback_data="admin_channels")]
     ]
 
     await update.message.reply_text(
@@ -181,18 +273,118 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     data = query.data
+    # ================= CHANNELS =================
+
+    if data == "admin_channels":
+
+        keyboard = [
+
+            [InlineKeyboardButton(
+                "➕ Kanal qo'shish",
+                callback_data="add_channel"
+            )],
+
+            [InlineKeyboardButton(
+                "🗑 Kanal o'chirish",
+                callback_data="delete_channel"
+            )],
+
+            [InlineKeyboardButton(
+                "🔙 Orqaga",
+                callback_data="admin_back"
+            )]
+        ]
+
+        await query.edit_message_text(
+            "📢 Kanal boshqaruvi",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
+
+        return
 
     # ================= ADD MOVIE =================
 
-    if data == "admin_add":
+    elif data == "admin_add":
+
         context.user_data["state"] = "waiting_code"
 
         await query.edit_message_text(
             "➕ *Yangi kino qo'shish*\n\n"
-            "1️⃣ Kino kodini yuboring.\n"
+            "🎬 Kino kodini yuboring.\n"
             "Masalan: `1001`",
             parse_mode="Markdown"
         )
+
+        # ================= CHANNEL DELETE =================
+
+    elif data == "delete_channel":
+
+        channels = db.get_channels()
+
+        if not channels:
+            await query.edit_message_text(
+                "❌ Kanallar yo'q"
+            )
+
+            return
+
+        keyboard = []
+
+        for channel in channels:
+            keyboard.append([
+
+                InlineKeyboardButton(
+                    channel[2],
+                    callback_data=f"del_channel_{channel[1]}"
+                )
+
+            ])
+
+        await query.edit_message_text(
+            "🗑 O'chiriladigan kanalni tanlang",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
+
+
+    elif data.startswith("del_channel_"):
+
+        channel_id = data.replace(
+            "del_channel_",
+            ""
+        )
+
+        db.delete_channel(channel_id)
+
+        await query.edit_message_text(
+            "✅ Kanal o'chirildi"
+        )
+
+
+    elif data == "check_sub":
+
+        is_subscribed = await check_subscription(
+            query.from_user.id,
+            context.bot
+        )
+
+        if is_subscribed:
+
+            await query.message.delete()
+
+            await query.message.reply_text(
+                "✅ Obuna tasdiqlandi"
+            )
+
+        else:
+
+            await query.answer(
+                "❌ Hali barcha kanallarga obuna bo'lmagansiz",
+                show_alert=True
+            )
 
     # ================= LIST MOVIES =================
 
@@ -395,6 +587,35 @@ async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+
+    # ================= WAITING CHANNEL =================
+
+    elif state == "waiting_channel":
+
+        channel_id = text
+
+        try:
+
+            chat = await context.bot.get_chat(
+                channel_id
+            )
+
+            db.add_channel(
+                channel_id,
+                chat.title
+            )
+
+            context.user_data.clear()
+
+            await update.message.reply_text(
+                f"✅ Kanal qo'shildi:\n{chat.title}"
+            )
+
+        except Exception as e:
+
+            await update.message.reply_text(
+                f"❌ Xato:\n{e}"
+            )
 
 # ===================== ADMIN FILE HANDLER =====================
 
