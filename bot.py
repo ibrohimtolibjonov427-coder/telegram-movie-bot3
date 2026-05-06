@@ -268,7 +268,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_admin(query.from_user.id):
         await query.edit_message_text(
-            "❌ Siz admin emassiz!"
+            "Kino kodini yuboring!"
         )
         return
 
