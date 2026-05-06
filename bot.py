@@ -22,10 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ===================== CONFIG =====================
 
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN",
-    "TOKENINGIZNI_BU_YERGA_QOYING"
-)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 ADMIN_IDS = list(
     map(int, os.getenv("ADMIN_IDS", "7454731921").split(","))
