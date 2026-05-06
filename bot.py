@@ -304,6 +304,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+    elif data == "add_channel":
+
+        context.user_data["state"] = "waiting_channel"
+
+        await query.edit_message_text(
+            "📢 Kanal username yuboring.\n\n"
+            "Masalan:\n"
+            "@mychannel"
+        )
+
     # ================= ADD MOVIE =================
 
     elif data == "admin_add":
